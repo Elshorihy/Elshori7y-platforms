@@ -1,14 +1,145 @@
-import React,{useEffect,useState}from'react';import{createRoot}from'react-dom/client';import{supabase}from'./lib/supabaseClient';import'./styles.css';
-type Profile={id:string;display_name:string|null;username:string;chat_key?:string;verification_status:string;is_banned:boolean};type Conv={id:string;type:string;created_at:string};type Msg={id:string;conversation_id:string;sender_id:string;body:string|null;message_type:string;created_at:string;read_at:string|null};
-function Auth({refresh}:{refresh:()=>void}){const[signup,setSignup]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[name,setName]=useState(''),[username,setUsername]=useState(''),[error,setError]=useState('');async function submit(e:React.FormEvent){e.preventDefault();setError('');if(signup){const u=username.trim().toLowerCase();if(!/^[a-z0-9_]{3,24}$/.test(u)){setError('اسم المستخدم لازم يكون 3-24 حرف إنجليزي أو أرقام أو _');return}const r=await supabase.auth.signUp({email,password,options:{data:{display_name:name,username:u}}});if(r.error)setError(r.error.message);else setError('تم إنشاء الحساب. أكد الإيميل ثم سجل الدخول.')}else{const r=await supabase.auth.signInWithPassword({email,password});if(r.error)setError(r.error.message);else refresh();}}return <div className="auth"><form className="card" onSubmit={submit}><h1>ELshori7y</h1>{signup&&<><input required placeholder="الاسم الظاهر" value={name} onChange={e=>setName(e.target.value)}/><input required minLength={3} maxLength={24} pattern="[A-Za-z0-9_]+" placeholder="اسم المستخدم - مثال: hamza_7" value={username} onChange={e=>setUsername(e.target.value)}/></>}<input required type="email" placeholder="الإيميل" value={email} onChange={e=>setEmail(e.target.value)}/><input required minLength={6} type="password" placeholder="كلمة السر" value={password} onChange={e=>setPassword(e.target.value)}/><button>{signup?'إنشاء حساب':'دخول'}</button>{error&&<p className="error">{error}</p>}<button type="button" className="ghost" onClick={()=>setSignup(!signup)}>{signup?'عندي حساب':'إنشاء حساب جديد'}</button></form></div>}
-function App(){const[session,setSession]=useState<any>(null),[profile,setProfile]=useState<Profile|null>(null),[users,setUsers]=useState<Profile[]>([]),[convs,setConvs]=useState<Conv[]>([]),[active,setActive]=useState<string|null>(null),[messages,setMessages]=useState<Msg[]>([]),[query,setQuery]=useState(''),[key,setKey]=useState(''),[text,setText]=useState(''),[loading,setLoading]=useState(true);const uid=session?.user?.id;
-async function load(){const{data,error}=await supabase.auth.getSession();if(error){setSession(null);setProfile(null);setLoading(false);return}setSession(data.session);if(data.session){const{data:p,error:pe}=await supabase.from('profiles').select('id,display_name,username,chat_key,verification_status,is_banned').eq('id',data.session.user.id).single();if(pe)setProfile(null);else setProfile(p);await loadConvs(data.session.user.id)}else setProfile(null);setLoading(false)}
-async function loadConvs(id:string){const{data}=await supabase.from('conversation_participants').select('conversation_id').eq('user_id',id);const ids=(data??[]).map(x=>x.conversation_id);if(!ids.length){setConvs([]);return}const{data:c}=await supabase.from('conversations').select('id,type,created_at').in('id',ids).order('created_at',{ascending:false});setConvs(c??[])}
-async function openConv(id:string){setActive(id);const{data}=await supabase.from('messages').select('*').eq('conversation_id',id).order('created_at',{ascending:true});setMessages(data??[]);await supabase.rpc('mark_messages_read',{conversation_uuid:id})}
-async function newChat(){const u=query.trim().toLowerCase(),k=key.trim().toUpperCase();if(!u||!k){alert('اكتب اسم المستخدم ومفتاح المستخدم');return}const{data,error}=await supabase.rpc('create_direct_conversation_by_credentials',{target_username:u,target_chat_key:k});if(error){alert(error.message);return}await loadConvs(uid);await openConv(data);setQuery('');setKey('')}
-async function send(){if(!text.trim()||!active)return;const body=text.trim();setText('');const{error}=await supabase.from('messages').insert({conversation_id:active,sender_id:uid,body:body,message_type:'text'});if(error)alert(error.message)}
-useEffect(()=>{load();const{data}=supabase.auth.onAuthStateChange(()=>load());return()=>data.subscription.unsubscribe()},[]);
-useEffect(()=>{if(!active)return;const ch=supabase.channel('messages-'+active).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'conversation_id=eq.'+active},p=>setMessages(m=>m.some(x=>x.id===p.new.id)?m:[...m,p.new as Msg])).subscribe();return()=>{supabase.removeChannel(ch)}},[active]);
-useEffect(()=>{if(!uid)return;(async()=>{const{data}=await supabase.from('profiles').select('id,display_name,username,verification_status,is_banned').eq('verification_status','verified').eq('is_banned',false).neq('id',uid).limit(50);setUsers(data??[])})()},[uid]);
-if(loading)return <div className="center">جاري التحميل...</div>;if(!session)return <Auth refresh={load}/>;if(!profile)return <div className="center">تعذر تحميل الحساب.</div>;if(profile.is_banned)return <div className="center">الحساب محظور.</div>;if(profile.verification_status!=='verified')return <div className="center card"><h2>الحساب قيد المراجعة</h2><p>بعد التحقق من الحساب هتقدر تستخدم المحادثات.</p><button onClick={()=>supabase.auth.signOut()}>خروج</button></div>;const filtered=users.filter(u=>(u.username??'').toLowerCase().includes(query.toLowerCase()));return <div><header><b>ELshori7y</b><button onClick={()=>supabase.auth.signOut()}>خروج</button></header><div className="layout"><aside><div className="identity"><b>حسابك</b><div>@{profile.username}</div><small>مفتاح الدردشة: <strong>{profile.chat_key??'—'}</strong></small></div><input placeholder="اسم المستخدم" value={query} onChange={e=>setQuery(e.target.value)}/><input placeholder="مفتاح المستخدم" value={key} onChange={e=>setKey(e.target.value.toUpperCase())}/><button onClick={newChat}>بدء دردشة آمنة</button>{query&&filtered.length>0&&<div className="userResults">{filtered.map(u=><div className="user" key={u.id}><b>@{u.username}</b><small>{u.display_name||'مستخدم'}</small></div>)}</div>}<p className="hint">لا يمكن بدء الدردشة إلا باسم المستخدم + المفتاح الصحيح.</p><h3>المحادثات</h3>{convs.map(c=><button className={'conv '+(active===c.id?'active':'')} key={c.id} onClick={()=>openConv(c.id)}>محادثة مباشرة</button>)}</aside><section className="chat"><div className="msgs">{active?messages.map(m=><div className={'msg '+(m.sender_id===uid?'mine':'')} key={m.id}>{m.body??''}<small>{new Date(m.created_at).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})}</small></div>):<div className="center">اكتب اسم المستخدم والمفتاح لبدء محادثة آمنة</div>}</div>{active&&<form className="composer" onSubmit={e=>{e.preventDefault();send()}}><input value={text} onChange={e=>setText(e.target.value)} placeholder="اكتب رسالة..."/><button>إرسال</button></form>}</section></div></div>}
+import React,{useEffect,useMemo,useState}from'react';
+import{createRoot}from'react-dom/client';
+import{supabase}from'./lib/supabaseClient';
+import'./styles.css';
+
+type Profile={id:string;display_name:string|null;username:string;chat_key?:string;verification_status:string;is_banned:boolean};
+type Conv={id:string;type:string;created_at:string};
+type Msg={id:string;conversation_id:string;sender_id:string;body:string|null;message_type:string;created_at:string;read_at:string|null};
+
+type UserResult=Pick<Profile,'id'|'display_name'|'username'>;
+
+function Auth({refresh}:{refresh:()=>void}){
+ const[signup,setSignup]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[name,setName]=useState(''),[username,setUsername]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ async function submit(e:React.FormEvent){
+  e.preventDefault();setError('');
+  if(password.length<6){setError('كلمة السر لازم تكون 6 حروف على الأقل');return}
+  setBusy(true);
+  try{
+   if(signup){
+    const u=username.trim().toLowerCase();
+    if(!/^[a-z0-9_]{3,24}$/.test(u)){setError('اسم المستخدم لازم يكون 3-24 حرف إنجليزي أو أرقام أو _');return}
+    const r=await supabase.auth.signUp({email:email.trim(),password,options:{data:{display_name:name.trim(),username:u}}});
+    if(r.error)setError(r.error.message);
+    else if(r.data.session)refresh();
+    else setError('تم إنشاء الحساب. أكد الإيميل ثم سجل الدخول.');
+   }else{
+    const r=await supabase.auth.signInWithPassword({email:email.trim(),password});
+    if(r.error)setError(r.error.message);else refresh();
+   }
+  }catch(err:any){setError(err?.message||'حصل خطأ غير متوقع');}
+  finally{setBusy(false)}
+ }
+ return <div className="auth"><form className="card auth-card" onSubmit={submit}>
+  <div className="brand"><div className="brand-mark">E</div><div><h1>ELshori7y</h1><small>منصة محادثات آمنة</small></div></div>
+  {signup&&<>
+   <label>الاسم الظاهر</label><input required placeholder="مثال: حمزة" value={name} onChange={e=>setName(e.target.value)}/>
+   <label>اسم المستخدم</label><input required minLength={3} maxLength={24} pattern="[A-Za-z0-9_]+" placeholder="مثال: hamza_7" value={username} onChange={e=>setUsername(e.target.value)}/>
+   <small className="hint">اسم المستخدم عام ويمكن مشاركته، ومفتاح الدردشة هو الجزء السري.</small>
+  </>}
+  <label>الإيميل</label><input required type="email" placeholder="example@email.com" value={email} onChange={e=>setEmail(e.target.value)}/>
+  <label>كلمة السر</label><input required minLength={6} type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)}/>
+  <button disabled={busy}>{busy?'جاري التنفيذ...':signup?'إنشاء حساب':'دخول'}</button>
+  {error&&<p className="error">{error}</p>}
+  <button type="button" className="ghost" onClick={()=>{setSignup(!signup);setError('')}}>{signup?'عندي حساب بالفعل':'إنشاء حساب جديد'}</button>
+ </form></div>
+}
+
+function App(){
+ const[session,setSession]=useState<any>(null),[profile,setProfile]=useState<Profile|null>(null),[users,setUsers]=useState<UserResult[]>([]),[convs,setConvs]=useState<Conv[]>([]),[active,setActive]=useState<string|null>(null),[messages,setMessages]=useState<Msg[]>([]),[query,setQuery]=useState(''),[key,setKey]=useState(''),[text,setText]=useState(''),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[showKey,setShowKey]=useState(false);
+ const uid=session?.user?.id;
+
+ async function load(){
+  const{data,error}=await supabase.auth.getSession();
+  if(error){setSession(null);setProfile(null);setLoading(false);return}
+  setSession(data.session);
+  if(data.session){
+   const{data:p,error:pe}=await supabase.from('profiles').select('id,display_name,username,chat_key,verification_status,is_banned').eq('id',data.session.user.id).single();
+   if(pe)setProfile(null);else setProfile(p);
+   await loadConvs(data.session.user.id);
+  }else{setProfile(null);setConvs([]);setActive(null);setMessages([])}
+  setLoading(false);
+ }
+
+ async function loadConvs(id:string){
+  const{data}=await supabase.from('conversation_participants').select('conversation_id').eq('user_id',id);
+  const ids=(data??[]).map(x=>x.conversation_id);
+  if(!ids.length){setConvs([]);return}
+  const{data:c}=await supabase.from('conversations').select('id,type,created_at').in('id',ids).order('created_at',{ascending:false});
+  setConvs(c??[]);
+ }
+
+ async function openConv(id:string){
+  setActive(id);
+  const{data,error}=await supabase.from('messages').select('*').eq('conversation_id',id).order('created_at',{ascending:true});
+  if(error){setNotice(error.message);return}
+  setMessages(data??[]);
+  await supabase.rpc('mark_messages_read',{conversation_uuid:id});
+ }
+
+ async function newChat(){
+  const u=query.trim().toLowerCase(),k=key.trim().toUpperCase();
+  if(!u||!k){setNotice('اكتب اسم المستخدم ومفتاح المستخدم');return}
+  setBusy(true);setNotice('');
+  const{data,error}=await supabase.rpc('create_direct_conversation_by_credentials',{target_username:u,target_chat_key:k});
+  setBusy(false);
+  if(error){setNotice(error.message);return}
+  await loadConvs(uid);await openConv(data);setQuery('');setKey('');
+ }
+
+ async function send(){
+  const body=text.trim();if(!body||!active||!uid)return;
+  setText('');
+  const{error}=await supabase.from('messages').insert({conversation_id:active,sender_id:uid,body,message_type:'text'});
+  if(error){setNotice(error.message);setText(body)}
+ }
+
+ async function copyKey(){
+  if(!profile?.chat_key)return;
+  try{await navigator.clipboard.writeText(profile.chat_key);setNotice('تم نسخ مفتاح الدردشة')}catch{setNotice('انسخ المفتاح يدويًا: '+profile.chat_key)}
+ }
+
+ async function logout(){await supabase.auth.signOut();setSession(null);setProfile(null);setConvs([]);setMessages([]);setActive(null)}
+
+ useEffect(()=>{load();const{data}=supabase.auth.onAuthStateChange((event,next)=>{if(event==='SIGNED_OUT'){setSession(null);setProfile(null)}else if(event==='SIGNED_IN'||event==='USER_UPDATED'){setSession(next);setTimeout(load,0)}});return()=>data.subscription.unsubscribe()},[]);
+ useEffect(()=>{if(!active)return;const ch=supabase.channel('messages-'+active).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'conversation_id=eq.'+active},p=>setMessages(m=>m.some(x=>x.id===p.new.id)?m:[...m,p.new as Msg])).subscribe();return()=>{supabase.removeChannel(ch)}},[active]);
+ useEffect(()=>{if(!uid)return;(async()=>{const{data}=await supabase.from('profiles').select('id,display_name,username').eq('verification_status','verified').eq('is_banned',false).neq('id',uid).order('username').limit(100);setUsers(data??[])})()},[uid]);
+
+ const filtered=useMemo(()=>{const q=query.trim().toLowerCase();if(!q)return[];return users.filter(u=>u.username.toLowerCase().includes(q)).slice(0,8)},[users,query]);
+ const activeTitle=active?'محادثة آمنة':'اختر محادثة';
+
+ if(loading)return <div className="center"><div className="loader-card">جاري تحميل ELshori7y...</div></div>;
+ if(!session)return <Auth refresh={load}/>;
+ if(!profile)return <div className="center"><div className="card"><h2>تعذر تحميل الحساب</h2><p>تأكد إن Migration قاعدة البيانات اتنفذت بالكامل.</p><button onClick={load}>إعادة المحاولة</button></div></div>;
+ if(profile.is_banned)return <div className="center"><div className="card"><h2>الحساب محظور</h2><button onClick={logout}>خروج</button></div></div>;
+ if(profile.verification_status!=='verified')return <div className="center"><div className="card review"><div className="status-icon">✓</div><h2>الحساب قيد المراجعة</h2><p>بعد التحقق من الحساب هتقدر تستخدم المحادثات.</p><button onClick={logout}>خروج</button></div></div>;
+
+ return <div className="app-shell">
+  <header><div className="header-brand"><div className="brand-mark small">E</div><b>ELshori7y</b></div><div className="header-user">@{profile.username}<button className="logout" onClick={logout}>خروج</button></div></header>
+  <div className="layout">
+   <aside>
+    <div className="identity">
+     <div className="identity-top"><div><b>{profile.display_name||profile.username}</b><small>@{profile.username}</small></div><span className="verified">موثّق</span></div>
+     <div className="key-box"><small>مفتاح الدردشة الخاص بك</small><div><strong>{showKey?profile.chat_key:'••••••••••'}</strong><button type="button" className="icon-btn" onClick={()=>setShowKey(!showKey)}>{showKey?'إخفاء':'إظهار'}</button></div><button type="button" className="copy-btn" onClick={copyKey}>نسخ المفتاح</button><small className="hint">شارك الـUsername عادي، لكن لا تشارك المفتاح إلا مع الشخص المسموح له ببدء محادثة معك.</small></div>
+    </div>
+    <div className="new-chat">
+     <h3>بدء دردشة جديدة</h3>
+     <input placeholder="اسم المستخدم @username" value={query} onChange={e=>setQuery(e.target.value.replace(/^@/,''))}/>
+     <input placeholder="مفتاح المستخدم" value={key} onChange={e=>setKey(e.target.value.toUpperCase())}/>
+     {filtered.length>0&&<div className="userResults">{filtered.map(u=><button className="user" key={u.id} onClick={()=>setQuery(u.username)}><span><b>@{u.username}</b><small>{u.display_name||'مستخدم'}</small></span><span>اختيار</span></button>)}</div>}
+     <button disabled={busy} onClick={newChat}>{busy?'جاري التحقق...':'بدء دردشة آمنة'}</button>
+     <p className="hint">لا يتم فتح المحادثة إلا إذا تطابق اسم المستخدم مع مفتاحه وكان الحساب موثّقًا وغير محظور.</p>
+    </div>
+    <div className="conversation-list"><div className="section-title">محادثاتك <span>{convs.length}</span></div>{convs.map(c=><button className={'conv '+(active===c.id?'active':'')} key={c.id} onClick={()=>openConv(c.id)}><span className="conv-avatar">{c.type==='direct'?'↔':'#'}</span><span><b>محادثة مباشرة</b><small>{new Date(c.created_at).toLocaleDateString('ar-EG')}</small></span></button>)}{!convs.length&&<p className="empty">لسه مفيش محادثات. ابدأ واحدة من فوق.</p>}</div>
+   </aside>
+   <section className="chat">
+    <div className="chat-head"><div><b>{activeTitle}</b>{active&&<small>الاتصال مؤمّن باسم المستخدم + المفتاح</small>}</div></div>
+    {notice&&<div className="notice">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
+    <div className="msgs">{active?messages.map(m=><div className={'msg '+(m.sender_id===uid?'mine':'')} key={m.id}><div>{m.body??''}</div><small>{new Date(m.created_at).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})}</small></div>):<div className="empty-chat"><div className="empty-icon">🔒</div><h2>محادثات ELshori7y</h2><p>ابحث عن المستخدم، أدخل مفتاحه، وابدأ دردشة آمنة.</p></div>}</div>
+    {active&&<form className="composer" onSubmit={e=>{e.preventDefault();send()}}><input autoFocus value={text} onChange={e=>setText(e.target.value)} placeholder="اكتب رسالة..."/><button disabled={!text.trim()}>إرسال</button></form>}
+   </section>
+  </div>
+ </div>
+}
+
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
