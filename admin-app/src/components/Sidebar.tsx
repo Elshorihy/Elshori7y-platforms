@@ -1,0 +1,3 @@
+import React from "react";
+import { NavLink } from "react-router-dom";
+export default function Sidebar({onLogout}:{onLogout:()=>void}){return <nav className="admin-sidebar"><div className="admin-sidebar__brand">ELshori7y Admin</div><NavLink to="/" end className="admin-sidebar__link">Dashboard</NavLink><NavLink to="/users" className="admin-sidebar__link">Users</NavLink><NavLink to="/reports" className="admin-sidebar__link">Reports</NavLink><button className="admin-sidebar__logout" onClick={onLogout}>Log out</button></nav>;}

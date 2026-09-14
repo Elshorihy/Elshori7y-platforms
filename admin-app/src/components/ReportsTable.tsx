@@ -1,0 +1,4 @@
+import React from "react";
+export interface AdminReportRow{id:string;reason:string;created_at:string;resolved_at:string|null;reporter_name?:string;reported_name?:string;}
+interface Props{reports:AdminReportRow[];onResolve:(reportId:string)=>void;}
+export default function ReportsTable({reports,onResolve}:Props){if(reports.length===0)return <p>No reports.</p>;return <table className="reports-table"><thead><tr><th>Reporter</th><th>Reported user</th><th>Reason</th><th>Filed</th><th>Status</th><th></th></tr></thead><tbody>{reports.map(r=><tr key={r.id}><td>{r.reporter_name??r.id}</td><td>{r.reported_name??"—"}</td><td>{r.reason}</td><td>{new Date(r.created_at).toLocaleDateString()}</td><td>{r.resolved_at?"Resolved":"Open"}</td><td>{!r.resolved_at&&<button onClick={()=>onResolve(r.id)}>Mark resolved</button>}</td></tr>)}</tbody></table>;}

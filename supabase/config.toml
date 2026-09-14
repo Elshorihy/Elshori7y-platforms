@@ -1,0 +1,9 @@
+project_id = "replace-me"
+[functions.mint-call-token]
+verify_jwt = true
+[functions.admin-verify-user]
+verify_jwt = true
+[functions.admin-ban-user]
+verify_jwt = true
+[functions.admin-resolve-report]
+verify_jwt = true
