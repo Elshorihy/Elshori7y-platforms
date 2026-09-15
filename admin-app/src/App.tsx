@@ -26,19 +26,6 @@ export default function App() {
     let alive = true;
 
     const boot = async () => {
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get("code");
-
-      // Google/Supabase PKCE callback: exchange the code before ANY auth gate
-      // runs. This removes the login-page bounce after successful Google login.
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) console.error("OAuth code exchange failed:", error);
-        url.searchParams.delete("code");
-        url.searchParams.delete("state");
-        window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
-      }
-
       const { data } = await supabase.auth.getSession();
       if (alive) await applyAuthSession(data.session);
     };
