@@ -6,7 +6,6 @@ import'./styles.css';
 type Profile={id:string;display_name:string|null;username:string;chat_key?:string;verification_status:string;is_banned:boolean};
 type Conv={id:string;type:string;created_at:string};
 type Msg={id:string;conversation_id:string;sender_id:string;body:string|null;message_type:string;created_at:string;read_at:string|null};
-
 type UserResult=Pick<Profile,'id'|'display_name'|'username'>;
 
 function Auth({refresh}:{refresh:()=>void}){
@@ -62,10 +61,12 @@ function App(){
  }
 
  async function loadConvs(id:string){
-  const{data}=await supabase.from('conversation_participants').select('conversation_id').eq('user_id',id);
+  const{data,error}=await supabase.from('conversation_participants').select('conversation_id').eq('user_id',id);
+  if(error){setNotice(error.message);setConvs([]);return}
   const ids=(data??[]).map(x=>x.conversation_id);
   if(!ids.length){setConvs([]);return}
-  const{data:c}=await supabase.from('conversations').select('id,type,created_at').in('id',ids).order('created_at',{ascending:false});
+  const{data:c,error:ce}=await supabase.from('conversations').select('id,type,created_at').in('id',ids).order('created_at',{ascending:false});
+  if(ce){setNotice(ce.message);setConvs([]);return}
   setConvs(c??[]);
  }
 
@@ -74,7 +75,8 @@ function App(){
   const{data,error}=await supabase.from('messages').select('*').eq('conversation_id',id).order('created_at',{ascending:true});
   if(error){setNotice(error.message);return}
   setMessages(data??[]);
-  await supabase.rpc('mark_messages_read',{conversation_uuid:id});
+  const{error:readError}=await supabase.rpc('mark_messages_read',{conversation_uuid:id});
+  if(readError)setNotice(readError.message);
  }
 
  async function newChat(){
@@ -89,9 +91,12 @@ function App(){
 
  async function send(){
   const body=text.trim();if(!body||!active||!uid)return;
+  setBusy(true);setNotice('');
+  const{data,error}=await supabase.rpc('send_message',{p_conversation_id:active,p_body:body,p_message_type:'text'});
+  setBusy(false);
+  if(error){setNotice(error.message);return}
   setText('');
-  const{error}=await supabase.from('messages').insert({conversation_id:active,sender_id:uid,body,message_type:'text'});
-  if(error){setNotice(error.message);setText(body)}
+  if(data){setMessages(m=>m.some(x=>x.id===data.id)?m:[...m,data as Msg])}
  }
 
  async function copyKey(){
@@ -103,7 +108,7 @@ function App(){
 
  useEffect(()=>{load();const{data}=supabase.auth.onAuthStateChange((event,next)=>{if(event==='SIGNED_OUT'){setSession(null);setProfile(null)}else if(event==='SIGNED_IN'||event==='USER_UPDATED'){setSession(next);setTimeout(load,0)}});return()=>data.subscription.unsubscribe()},[]);
  useEffect(()=>{if(!active)return;const ch=supabase.channel('messages-'+active).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'conversation_id=eq.'+active},p=>setMessages(m=>m.some(x=>x.id===p.new.id)?m:[...m,p.new as Msg])).subscribe();return()=>{supabase.removeChannel(ch)}},[active]);
- useEffect(()=>{if(!uid)return;(async()=>{const{data}=await supabase.from('profiles').select('id,display_name,username').eq('verification_status','verified').eq('is_banned',false).neq('id',uid).order('username').limit(100);setUsers(data??[])})()},[uid]);
+ useEffect(()=>{if(!uid)return;(async()=>{const{data,error}=await supabase.from('profiles').select('id,display_name,username').eq('verification_status','verified').eq('is_banned',false).neq('id',uid).order('username').limit(100);if(error){setNotice(error.message);return}setUsers(data??[])})()},[uid]);
 
  const filtered=useMemo(()=>{const q=query.trim().toLowerCase();if(!q)return[];return users.filter(u=>u.username.toLowerCase().includes(q)).slice(0,8)},[users,query]);
  const activeTitle=active?'محادثة آمنة':'اختر محادثة';
@@ -136,7 +141,7 @@ function App(){
     <div className="chat-head"><div><b>{activeTitle}</b>{active&&<small>الاتصال مؤمّن باسم المستخدم + المفتاح</small>}</div></div>
     {notice&&<div className="notice">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
     <div className="msgs">{active?messages.map(m=><div className={'msg '+(m.sender_id===uid?'mine':'')} key={m.id}><div>{m.body??''}</div><small>{new Date(m.created_at).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})}</small></div>):<div className="empty-chat"><div className="empty-icon">🔒</div><h2>محادثات ELshori7y</h2><p>ابحث عن المستخدم، أدخل مفتاحه، وابدأ دردشة آمنة.</p></div>}</div>
-    {active&&<form className="composer" onSubmit={e=>{e.preventDefault();send()}}><input autoFocus value={text} onChange={e=>setText(e.target.value)} placeholder="اكتب رسالة..."/><button disabled={!text.trim()}>إرسال</button></form>}
+    {active&&<form className="composer" onSubmit={e=>{e.preventDefault();send()}}><input autoFocus value={text} onChange={e=>setText(e.target.value)} placeholder="اكتب رسالة..."/><button disabled={!text.trim()||busy}>{busy?'...':'إرسال'}</button></form>}
    </section>
   </div>
  </div>
