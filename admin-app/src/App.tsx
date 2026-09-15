@@ -11,13 +11,6 @@ interface AdminSession { userId: string; isAdmin: boolean; }
 
 const ADMIN_EMAILS = new Set(["sheenomatp@gmail.com"]);
 
-function adminSessionFromUser(user: { id: string; email?: string | null }): AdminSession {
-  return {
-    userId: user.id,
-    isAdmin: ADMIN_EMAILS.has((user.email ?? "").toLowerCase()),
-  };
-}
-
 export default function App() {
   const [session, setSession] = useState<AdminSession | null | undefined>(undefined);
 
@@ -46,15 +39,28 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (mounted) applyAuthSession(data.session);
-    });
+    const boot = async () => {
+      // IMPORTANT: complete the Supabase PKCE OAuth exchange before the
+      // initial auth gate can decide that the user is logged out.
+      const code = new URLSearchParams(window.location.search).get("code");
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) {
+          console.error("OAuth code exchange failed:", error);
+        }
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      const { data } = await supabase.auth.getSession();
+      if (mounted) await applyAuthSession(data.session);
+    };
+
+    boot();
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, authSession) => {
-      // Use the session supplied by Supabase instead of calling getSession()
-      // from inside the auth callback. This prevents the OAuth callback from
-      // racing the initial auth check and bouncing the user back to Login.
-      if (mounted) applyAuthSession(authSession);
+      if (mounted) {
+        void applyAuthSession(authSession);
+      }
     });
 
     return () => {
