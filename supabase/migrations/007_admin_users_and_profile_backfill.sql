@@ -3,7 +3,7 @@
 
 -- 1) Make the admin check agree with the Admin app's allowlisted admin email,
 --    while still honoring profiles.role = 'admin' when present.
-create or replace function public.is_admin(user_id uuid)
+create or replace function public.is_admin(uid uuid)
 returns boolean
 language sql
 stable
@@ -13,13 +13,13 @@ as $$
   select exists (
     select 1
     from auth.users u
-    where u.id = user_id
+    where u.id = uid
       and lower(coalesce(u.email, '')) = 'sheenomatp@gmail.com'
   )
   or exists (
     select 1
     from public.profiles p
-    where p.id = user_id
+    where p.id = uid
       and lower(coalesce(p.role, '')) = 'admin'
   );
 $$;
@@ -49,8 +49,7 @@ where not exists (
 )
 on conflict (id) do nothing;
 
--- 3) Repair any accidental username/chat-key collisions created by the
---    backfill before the unique constraints are relied upon.
+-- 3) Repair missing username/chat-key values.
 update public.profiles p
 set username = 'user_' || substr(replace(p.id::text, '-', ''), 1, 8)
 where p.username is null or btrim(p.username) = '';
