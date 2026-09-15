@@ -1,9 +1,23 @@
 import { createClient } from "@supabase/supabase-js";
 
-const url = (import.meta.env.VITE_SUPABASE_URL || "https://fxmsppakjrqgsebldhrs.supabase.co").trim();
-const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_59UHlEQni8W4ZawWGyQ_n9_66JCx").trim();
+const url = (
+  import.meta.env.VITE_SUPABASE_URL ||
+  "https://fxmsppakjrqgsebldhrs.supabase.co"
+).trim();
 
-export const supabase = createClient(url, anonKey);
+// Supabase now recommends the publishable key for browser apps.
+// Keep the old variable name as a compatibility fallback for Cloudflare.
+const publishableKey = (
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  "sb_publishable_59UHlEQni8W4ZawWGyQ_n9_66JCx"
+).trim();
+
+if (!url || !publishableKey) {
+  throw new Error("Missing Supabase environment variables");
+}
+
+export const supabase = createClient(url, publishableKey);
 
 export async function callAdminFunction<T>(
   name: string,
@@ -17,6 +31,7 @@ export async function callAdminFunction<T>(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      apikey: publishableKey,
       Authorization: `Bearer ${jwt}`,
     },
     body: JSON.stringify(body),
