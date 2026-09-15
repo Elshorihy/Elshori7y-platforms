@@ -1,0 +1,12 @@
+{
+  "name":"ELshori7y",
+  "short_name":"ELshori7y",
+  "description":"منصة محادثات آمنة",
+  "start_url":"/",
+  "display":"standalone",
+  "dir":"rtl",
+  "lang":"ar",
+  "theme_color":"#071326",
+  "background_color":"#071326",
+  "icons":[]
+}
