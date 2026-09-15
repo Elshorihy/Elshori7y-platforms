@@ -1,9 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 
-// These are public browser-side Supabase values. Keeping them in the build
-// avoids Cloudflare Pages/Workers environment-variable mismatches.
+// Public browser-side Supabase values.
 const url = "https://fxmsppakjrqgsebldhrs.supabase.co";
-const publishableKey = "sb_publishable_59UHlEQni8W4ZawWGyQ_n9_66JCx";
+const publishableKey = "sb_publishable_59UHlLEq_Ni8W4ZawWGWyQ_n9_66JCx";
 
 export const supabase = createClient(url, publishableKey);
 
