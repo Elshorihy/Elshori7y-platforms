@@ -1,21 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
-const url = (
-  import.meta.env.VITE_SUPABASE_URL ||
-  "https://fxmsppakjrqgsebldhrs.supabase.co"
-).trim();
-
-// Supabase now recommends the publishable key for browser apps.
-// Keep the old variable name as a compatibility fallback for Cloudflare.
-const publishableKey = (
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
-  "sb_publishable_59UHlEQni8W4ZawWGyQ_n9_66JCx"
-).trim();
-
-if (!url || !publishableKey) {
-  throw new Error("Missing Supabase environment variables");
-}
+// These are public browser-side Supabase values. Keeping them in the build
+// avoids Cloudflare Pages/Workers environment-variable mismatches.
+const url = "https://fxmsppakjrqgsebldhrs.supabase.co";
+const publishableKey = "sb_publishable_59UHlEQni8W4ZawWGyQ_n9_66JCx";
 
 export const supabase = createClient(url, publishableKey);
 
