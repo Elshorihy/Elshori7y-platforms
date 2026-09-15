@@ -1,9 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Cloudflare should normally provide these as build-time environment variables.
-// The publishable Supabase key is safe to ship in a browser app; the service-role key is never used here.
-const url = import.meta.env.VITE_SUPABASE_URL || "https://fxmsppakjrqgsebldhrs.supabase.co";
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_59UHlEQni8W4ZawWGyQ_n9_66JCx";
+const url = (import.meta.env.VITE_SUPABASE_URL || "https://fxmsppakjrqgsebldhrs.supabase.co").trim();
+const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_59UHlEQni8W4ZawWGyQ_n9_66JCx").trim();
 
 export const supabase = createClient(url, anonKey);
 
