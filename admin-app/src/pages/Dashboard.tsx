@@ -4,25 +4,15 @@ import StatCard from"../components/StatCard";
 
 interface Stats{pendingVerifications:number;openReports:number;messagesLast7Days:number;verifiedUsers:number;}
 
-async function countQuery(query:any){
- const{count,error}=await query;
- if(error)throw new Error(error.message);
- return count??0;
-}
-
 export default function Dashboard(){
  const[stats,setStats]=useState<Stats|null>(null);const[error,setError]=useState<string|null>(null);const[refreshing,setRefreshing]=useState(false);
  const load=useCallback(async()=>{
   setRefreshing(true);setError(null);
-  const since=new Date(Date.now()-7*24*60*60*1000).toISOString();
   try{
-   const[pending,reports,messages,verified]=await Promise.all([
-    countQuery(supabase.from("profiles").select("id",{count:"exact",head:true}).eq("verification_status","pending")),
-    countQuery(supabase.from("reports").select("id",{count:"exact",head:true}).is("resolved_at",null)),
-    countQuery(supabase.from("messages").select("id",{count:"exact",head:true}).gte("created_at",since)),
-    countQuery(supabase.from("profiles").select("id",{count:"exact",head:true}).eq("verification_status","verified").eq("is_banned",false)),
-   ]);
-   setStats({pendingVerifications:pending,openReports:reports,messagesLast7Days:messages,verifiedUsers:verified});
+   const{data,error:rpcError}=await supabase.rpc("admin_dashboard_stats");
+   if(rpcError)throw new Error(rpcError.message);
+   if(!data)throw new Error("لم ترجع قاعدة البيانات بيانات لوحة التحكم");
+   setStats({pendingVerifications:Number(data.pending_verifications??0),openReports:Number(data.open_reports??0),messagesLast7Days:Number(data.messages_last_7_days??0),verifiedUsers:Number(data.verified_users??0)});
   }catch(e:any){setError(e?.message||"تعذر تحميل بيانات لوحة التحكم");}
   finally{setRefreshing(false)}
  },[]);
@@ -36,6 +26,6 @@ export default function Dashboard(){
    <StatCard label="رسائل آخر 7 أيام" value={stats?.messagesLast7Days??"—"}/>
    <StatCard label="حسابات موثقة" value={stats?.verifiedUsers??"—"}/>
   </div>
-  <div className="dashboard-panel"><div><span className="panel-kicker">SYSTEM STATUS</span><h2>المنصة شغالة من مكان واحد</h2><p>إدارة المستخدمين، التوثيق والبلاغات أصبحت مباشرة من لوحة الإدارة بدون الاعتماد على Edge Functions لعمليات الإدارة الأساسية.</p></div><div className="status-pill"><i/> ONLINE</div></div>
+  <div className="dashboard-panel"><div><span className="panel-kicker">SYSTEM STATUS</span><h2>المنصة شغالة من مكان واحد</h2><p>إدارة المستخدمين، التوثيق والبلاغات أصبحت مباشرة من لوحة الإدارة بدون الاعتماد على استعلامات RLS الثقيلة.</p></div><div className="status-pill"><i/> ONLINE</div></div>
  </div>
 }
