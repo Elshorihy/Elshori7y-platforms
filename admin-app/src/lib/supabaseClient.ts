@@ -1,6 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Public browser-side Supabase values.
 const url = "https://fxmsppakjrqgsebldhrs.supabase.co";
 const publishableKey = "sb_publishable_59UHlLEq_Ni8W4ZawWGWyQ_n9_66JCx";
 
@@ -10,24 +9,15 @@ export async function callAdminFunction<T>(
   name: string,
   body: Record<string, unknown>
 ): Promise<T> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const jwt = sessionData.session?.access_token;
-  if (!jwt) throw new Error("Not authenticated");
+  const { data, error } = await supabase.functions.invoke<T>(name, { body });
 
-  const res = await fetch(`${url}/functions/v1/${name}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: publishableKey,
-      Authorization: `Bearer ${jwt}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? `${name} failed (${res.status})`);
+  if (error) {
+    throw new Error(error.message || `${name} failed`);
   }
 
-  return res.json();
+  if (!data) {
+    throw new Error(`${name} returned no data`);
+  }
+
+  return data;
 }
