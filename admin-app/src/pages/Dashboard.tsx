@@ -1,3 +1,75 @@
-import React,{useEffect,useState}from"react";import{supabase}from"../lib/supabaseClient";import StatCard from"../components/StatCard";
-interface Stats{pendingVerifications:number;openReports:number;messagesLast7Days:number;callMinutesLast7Days:number;}
-export default function Dashboard(){const[stats,setStats]=useState<Stats|null>(null);const[error,setError]=useState<string|null>(null);useEffect(()=>{load();},[]);async function load(){const sevenDaysAgo=new Date(Date.now()-7*24*60*60*1000).toISOString();const[{count:pending},{count:reports},{count:messages},{data:calls}]=await Promise.all([supabase.from("profiles").select("id",{count:"exact",head:true}).eq("verification_status","pending"),supabase.from("reports").select("id",{count:"exact",head:true}).is("resolved_at",null),supabase.from("messages").select("id",{count:"exact",head:true}).gte("created_at",sevenDaysAgo),supabase.from("calls").select("started_at, ended_at").eq("status","completed").gte("started_at",sevenDaysAgo)]);const callMinutes=(calls??[]).reduce((sum,c)=>{if(!c.ended_at)return sum;return sum+Math.max(0,(new Date(c.ended_at).getTime()-new Date(c.started_at).getTime())/60000);},0);setStats({pendingVerifications:pending??0,openReports:reports??0,messagesLast7Days:messages??0,callMinutesLast7Days:Math.round(callMinutes)});}if(error)return <p className="admin-error">{error}</p>;if(!stats)return <p>Loading…</p>;return <div className="admin-dashboard"><h1>Dashboard</h1><div className="admin-dashboard__stats"><StatCard label="Pending verifications" value={stats.pendingVerifications}/><StatCard label="Open reports" value={stats.openReports}/><StatCard label="Messages (7 days)" value={stats.messagesLast7Days}/><StatCard label="Call minutes (7 days)" value={stats.callMinutesLast7Days}/></div></div>;}
+import React, { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
+import StatCard from "../components/StatCard";
+
+interface Stats {
+  pendingVerifications: number;
+  openReports: number;
+  messagesLast7Days: number;
+  callMinutesLast7Days: number;
+}
+
+export default function Dashboard() {
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+
+    async function load() {
+      setError(null);
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      const results = await Promise.all([
+        supabase.from("profiles").select("id", { count: "exact", head: true }).eq("verification_status", "pending"),
+        supabase.from("reports").select("id", { count: "exact", head: true }).is("resolved_at", null),
+        supabase.from("messages").select("id", { count: "exact", head: true }).gte("created_at", sevenDaysAgo),
+        supabase.from("calls").select("started_at, ended_at").eq("status", "completed").gte("started_at", sevenDaysAgo),
+      ]);
+
+      const firstError = results.find(result => result.error)?.error;
+      if (firstError) {
+        if (alive) setError(firstError.message);
+        return;
+      }
+
+      const [{ count: pending }, { count: reports }, { count: messages }, { data: calls }] = results;
+      const callMinutes = (calls ?? []).reduce((sum, call) => {
+        if (!call.ended_at || !call.started_at) return sum;
+        return sum + Math.max(
+          0,
+          (new Date(call.ended_at).getTime() - new Date(call.started_at).getTime()) / 60000,
+        );
+      }, 0);
+
+      if (alive) {
+        setStats({
+          pendingVerifications: pending ?? 0,
+          openReports: reports ?? 0,
+          messagesLast7Days: messages ?? 0,
+          callMinutesLast7Days: Math.round(callMinutes),
+        });
+      }
+    }
+
+    void load();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (error) return <p className="admin-error">{error}</p>;
+  if (!stats) return <p>Loading…</p>;
+
+  return (
+    <div className="admin-dashboard">
+      <h1>Dashboard</h1>
+      <div className="admin-dashboard__stats">
+        <StatCard label="Pending verifications" value={stats.pendingVerifications} />
+        <StatCard label="Open reports" value={stats.openReports} />
+        <StatCard label="Messages (7 days)" value={stats.messagesLast7Days} />
+        <StatCard label="Call minutes (7 days)" value={stats.callMinutesLast7Days} />
+      </div>
+    </div>
+  );
+}
