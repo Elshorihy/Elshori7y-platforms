@@ -1,75 +1,41 @@
-import React, { useEffect, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
-import StatCard from "../components/StatCard";
+import React,{useCallback,useEffect,useState}from"react";
+import{supabase}from"../lib/supabaseClient";
+import StatCard from"../components/StatCard";
 
-interface Stats {
-  pendingVerifications: number;
-  openReports: number;
-  messagesLast7Days: number;
-  callMinutesLast7Days: number;
+interface Stats{pendingVerifications:number;openReports:number;messagesLast7Days:number;verifiedUsers:number;}
+
+async function countQuery(query:any){
+ const{count,error}=await query;
+ if(error)throw new Error(error.message);
+ return count??0;
 }
 
-export default function Dashboard() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-
-    async function load() {
-      setError(null);
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-
-      const results = await Promise.all([
-        supabase.from("profiles").select("id", { count: "exact", head: true }).eq("verification_status", "pending"),
-        supabase.from("reports").select("id", { count: "exact", head: true }).is("resolved_at", null),
-        supabase.from("messages").select("id", { count: "exact", head: true }).gte("created_at", sevenDaysAgo),
-        supabase.from("calls").select("started_at, ended_at").eq("status", "completed").gte("started_at", sevenDaysAgo),
-      ]);
-
-      const firstError = results.find(result => result.error)?.error;
-      if (firstError) {
-        if (alive) setError(firstError.message);
-        return;
-      }
-
-      const [{ count: pending }, { count: reports }, { count: messages }, { data: calls }] = results;
-      const callMinutes = (calls ?? []).reduce((sum, call) => {
-        if (!call.ended_at || !call.started_at) return sum;
-        return sum + Math.max(
-          0,
-          (new Date(call.ended_at).getTime() - new Date(call.started_at).getTime()) / 60000,
-        );
-      }, 0);
-
-      if (alive) {
-        setStats({
-          pendingVerifications: pending ?? 0,
-          openReports: reports ?? 0,
-          messagesLast7Days: messages ?? 0,
-          callMinutesLast7Days: Math.round(callMinutes),
-        });
-      }
-    }
-
-    void load();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  if (error) return <p className="admin-error">{error}</p>;
-  if (!stats) return <p>Loading…</p>;
-
-  return (
-    <div className="admin-dashboard">
-      <h1>Dashboard</h1>
-      <div className="admin-dashboard__stats">
-        <StatCard label="Pending verifications" value={stats.pendingVerifications} />
-        <StatCard label="Open reports" value={stats.openReports} />
-        <StatCard label="Messages (7 days)" value={stats.messagesLast7Days} />
-        <StatCard label="Call minutes (7 days)" value={stats.callMinutesLast7Days} />
-      </div>
-    </div>
-  );
+export default function Dashboard(){
+ const[stats,setStats]=useState<Stats|null>(null);const[error,setError]=useState<string|null>(null);const[refreshing,setRefreshing]=useState(false);
+ const load=useCallback(async()=>{
+  setRefreshing(true);setError(null);
+  const since=new Date(Date.now()-7*24*60*60*1000).toISOString();
+  try{
+   const[pending,reports,messages,verified]=await Promise.all([
+    countQuery(supabase.from("profiles").select("id",{count:"exact",head:true}).eq("verification_status","pending")),
+    countQuery(supabase.from("reports").select("id",{count:"exact",head:true}).is("resolved_at",null)),
+    countQuery(supabase.from("messages").select("id",{count:"exact",head:true}).gte("created_at",since)),
+    countQuery(supabase.from("profiles").select("id",{count:"exact",head:true}).eq("verification_status","verified").eq("is_banned",false)),
+   ]);
+   setStats({pendingVerifications:pending,openReports:reports,messagesLast7Days:messages,verifiedUsers:verified});
+  }catch(e:any){setError(e?.message||"تعذر تحميل بيانات لوحة التحكم");}
+  finally{setRefreshing(false)}
+ },[]);
+ useEffect(()=>{void load();const id=window.setInterval(()=>{if(document.visibilityState==="visible")void load()},15000);return()=>window.clearInterval(id)},[load]);
+ return <div className="admin-dashboard">
+  <div className="page-heading"><div><span className="eyebrow">ELSHORI7Y CONTROL CENTER</span><h1>لوحة التحكم</h1><p>نظرة سريعة على حالة المنصة والمستخدمين والمحادثات.</p></div><button className="primary-btn" onClick={()=>void load()} disabled={refreshing}>{refreshing?"جاري التحديث…":"تحديث البيانات"}</button></div>
+  {error&&<div className="admin-error admin-error--box"><b>تعذر تحميل بعض بيانات اللوحة</b><span>{error}</span><button onClick={()=>void load()}>إعادة المحاولة</button></div>}
+  <div className="admin-dashboard__stats">
+   <StatCard label="طلبات التوثيق" value={stats?.pendingVerifications??"—"}/>
+   <StatCard label="بلاغات مفتوحة" value={stats?.openReports??"—"}/>
+   <StatCard label="رسائل آخر 7 أيام" value={stats?.messagesLast7Days??"—"}/>
+   <StatCard label="حسابات موثقة" value={stats?.verifiedUsers??"—"}/>
+  </div>
+  <div className="dashboard-panel"><div><span className="panel-kicker">SYSTEM STATUS</span><h2>المنصة شغالة من مكان واحد</h2><p>إدارة المستخدمين، التوثيق والبلاغات أصبحت مباشرة من لوحة الإدارة بدون الاعتماد على Edge Functions لعمليات الإدارة الأساسية.</p></div><div className="status-pill"><i/> ONLINE</div></div>
+ </div>
 }
