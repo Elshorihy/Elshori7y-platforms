@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "bun install --force && tsc -b && vite build",
-    "deploy": "wrangler deploy --assets ./dist --name elshori7y-admin --compatibility-date 2026-09-15"
+    "deploy": "node deploy.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
